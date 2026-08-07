@@ -18,6 +18,11 @@
 #error "platform_windows.c is Windows-only"
 #endif
 
+/* Expose ConPTY types (HPCON, PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE). They
+ * require Win10 RS5 headers; the MinGW default (_WIN32_WINNT 0x0A00 alone)
+ * is not enough because wincon.h checks NTDDI_VERSION >= 0x0A000006. */
+#define _WIN32_WINNT 0x0A00
+#define NTDDI_VERSION 0x0A000006
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
