@@ -60,6 +60,10 @@ usage: termrenderer [options] -- command [args...]
   --timeout MS    等待输出上限（毫秒）  默认 5000
   --output PATH   输出 PNG 路径         默认 out.png
   --fontsize N    字形像素尺寸          默认 18
+  --input PATH    向 pty 喂入输入文件（可重复，按序执行）
+  --input-delay MS 首份输入前等待时间    默认 300
+  --input-gap MS   相邻输入文件之间的间隔  默认 0
+  --dump PATH     把屏幕单元格写出为文本（row:col:char:r,g,b）
 ```
 
 ### 2.1 参数分隔符 `--`
