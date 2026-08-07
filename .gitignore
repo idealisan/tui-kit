@@ -1,5 +1,6 @@
 # build artifacts
 *.o
+*.a
 termrenderer
 termrenderer.exe
 

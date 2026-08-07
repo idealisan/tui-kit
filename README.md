@@ -61,8 +61,9 @@ Example:
 ./build.sh            # static build (no runtime dependencies)
 ```
 
-This produces a single static `termrenderer` binary. The bundled `lib/libvterm.a`
-is compiled from libvterm; FreeType, libpng, zlib and bzip2 are linked
+This produces a single static `termrenderer` binary. The bundled libvterm source
+in `third_party/libvterm/` is compiled on every build, so the archive always
+matches the host architecture; FreeType, libpng, zlib and bzip2 are linked
 statically when their `.a` files are present (via `pkg-config --static`).
 
 If you only have shared libraries, a dynamic build still works:
@@ -88,7 +89,8 @@ then run `./build.sh`.
 ## Layout
 
 ```
-lib/               vendored static libraries (libvterm.a)
+lib/               build-time output (libvterm.a, gitignored)
+third_party/       vendored source (libvterm/)
 include/           vendored headers (vterm.h)
 src/
   main.c           CLI, orchestration

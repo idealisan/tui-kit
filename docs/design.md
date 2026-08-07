@@ -269,7 +269,8 @@ termrenderer/
 ├── .gitignore
 ├── docs/                 本文档、开发者手册、用户手册
 ├── include/              内置头文件 (vterm.h, vterm_keycodes.h)
-├── lib/                  预编译静态库 (libvterm.a)
+├── lib/                  构建期生成的 libvterm.a（.gitignore 忽略）
+├── third_party/libvterm/ libvterm 源码（构建时编译，随架构自适应）
 └── src/
     ├── main.c
     ├── termrenderer.h

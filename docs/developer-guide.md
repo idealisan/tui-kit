@@ -76,26 +76,22 @@ pkg-config --static --libs freetype2 libpng   # 静态链接所需的全部 -l �
 
 ### 2.3 获取项目与内置 libvterm
 
-`lib/libvterm.a` 与 `include/vterm*.h` 已随项目提交（vendored），**通常无需重建**。
-如需从源码重建（例如升级版本、换架构），按以下步骤：
+`third_party/libvterm/` 已包含 libvterm 完整源码（vendored，MIT），Makefile 会
+在构建时自动从源码编译 `lib/libvterm.a`，保证归档与当前主机架构一致（避免
+跨架构链接错误，如 ARM 机器上编译的 `.a` 无法用于 x86_64 runner）。**无需手动
+构建或下载**。
+
+如需升级 libvterm 版本，替换 `third_party/libvterm/` 下的内容即可：
 
 ```bash
-# 下载 libvterm 源码（neovim 维护，MIT）
 cd /tmp
 git clone --depth 1 https://github.com/neovim/libvterm.git
-cd libvterm
-
-# 环境无 libtool 时，直接用 gcc 编译静态库
-gcc -O2 -fPIC -Iinclude -I. -c src/*.c
-ar rcs libvterm.a *.o
-
-# 将产物复制到项目
-cp libvterm.a /path/to/termrenderer/lib/
-cp include/vterm.h include/vterm_keycodes.h /path/to/termrenderer/include/
+rm -rf third_party/libvterm/src third_party/libvterm/include
+cp -r /tmp/libvterm/src /tmp/libvterm/include third_party/libvterm/
 ```
 
-> 若系统装有 `libtool`，也可直接 `make` 生成 `libvterm.la`，但上述 gcc 直编
-> 更简洁且结果相同。
+> 若系统装有 `libtool`，也可直接 `make` 生成 `libvterm.la`，但 Makefile 内
+> 的 gcc 直编更简洁且结果相同。
 
 ---
 
