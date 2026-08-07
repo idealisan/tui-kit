@@ -1,0 +1,146 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-and-test:
+    name: Build & Test (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config \
+            libfreetype6-dev libpng-dev \
+            zlib1g-dev libbz2-dev libbrotli-dev
+
+      - name: Build (static)
+        run: |
+          make clean
+          make STATIC=1
+
+      - name: Verify static binary
+        run: |
+          file termrenderer
+          ldd termrenderer 2>&1 || true
+
+      - name: Smoke test
+        run: |
+          ./termrenderer -- echo "hello world"
+          test -f out.png
+          echo "smoke test OK"
+
+      - name: Color/render test
+        run: |
+          ./termrenderer --output color.png -- \
+            printf '\033[31mRed\033[0m \033[1mBold\033[0m\n'
+          test -s color.png
+          echo "render test OK"
+
+      - name: Verify PNG has rendered content
+        run: |
+          python3 - <<'EOF'
+          import zlib, struct
+
+          def load_png(path):
+              data = open(path, 'rb').read()
+              pos, idat, w, h = 8, b'', 0, 0
+              while pos < len(data):
+                  ln  = struct.unpack('>I', data[pos:pos+4])[0]
+                  typ = data[pos+4:pos+8]
+                  if typ == b'IHDR':
+                      w, h = struct.unpack('>II', data[pos+8:pos+16])
+                  elif typ == b'IDAT':
+                      idat += data[pos+8:pos+8+ln]
+                  pos += 12 + ln
+              raw = zlib.decompress(idat)
+              bpp, stride = 4, w*4 + 1
+              rows, prev = [], bytearray(w*4)
+              for y in range(h):
+                  ft = raw[y*stride]
+                  line = bytearray(raw[y*stride+1:y*stride+1+w*4])
+                  out = bytearray(w*4)
+                  for i in range(w*4):
+                      a = out[i-bpp] if i >= bpp else 0
+                      b = prev[i]; c = prev[i-bpp] if i >= bpp else 0
+                      if   ft == 0: v = line[i]
+                      elif ft == 1: v = (line[i]+a) & 255
+                      elif ft == 2: v = (line[i]+b) & 255
+                      elif ft == 3: v = (line[i]+((a+b)>>1)) & 255
+                      elif ft == 4:
+                          p = a+b-c; pa,pb,pc = abs(p-a),abs(p-b),abs(p-c)
+                          pr = a if (pa<=pb and pa<=pc) else (b if pb<=pc else c)
+                          v = (line[i]+pr) & 255
+                      out[i] = v
+                  rows.append(out); prev = out
+              return w, h, rows
+
+          w, h, rows = load_png('color.png')
+          minx,miny,maxx,maxy = w,h,-1,-1
+          for y in range(h):
+              for x in range(0, w*4, 4):
+                  r,g,b = rows[y][x], rows[y][x+1], rows[y][x+2]
+                  if r or g or b:
+                      cx = x//4
+                      minx = min(minx,cx); maxx = max(maxx,cx)
+                      miny = min(miny,y); maxy = max(maxy,y)
+          print(f"size {w}x{h}, content bbox x[{minx}..{maxx}] y[{miny}..{maxy}]")
+          assert maxx > minx and maxy > miny, "image appears blank"
+          print("PASS: PNG contains rendered text")
+          EOF
+
+      - name: Platform layer unit test
+        run: |
+          gcc -O0 -g -Iinclude -Isrc -o /tmp/pty_check -x c - src/platform_posix.c -lutil <<'EOF'
+          #include <stdio.h>
+          #include "platform.h"
+          static void feed(void *ctx, const char *buf, int len) {
+              fwrite(buf, 1, (size_t)len, (FILE*)ctx);
+          }
+          int main(void) {
+              TrProc p;
+              if (tr_proc_spawn(&p, "echo pty-ok", 24, 80) < 0) return 1;
+              if (tr_proc_drain(&p, stdout, 5000, feed) < 0) return 2;
+              tr_proc_close(&p);
+              return 0;
+          }
+          EOF
+          out=$(/tmp/pty_check)
+          test "$out" = "pty-ok" || { echo "platform test failed: '$out'"; exit 1; }
+          echo "platform test OK"
+
+      - name: Upload render artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: renders
+          path: |
+            color.png
+            out.png
+
+  windows-build:
+    name: Build (Windows cross-compile)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install MinGW
+        run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-x86-64
+
+      - name: Syntax-check Windows platform layer
+        run: |
+          # Only compile-check platform_windows.c (needs Windows headers/libs to
+          # link fully). We verify it at least parses for the cross compiler.
+          x86_64-w64-mingw32-gcc -Wall -Wextra -Iinclude -Isrc -fsyntax-only \
+            src/platform_windows.c && echo "Windows platform layer syntax OK"
