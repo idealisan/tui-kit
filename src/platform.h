@@ -46,6 +46,9 @@ int tr_proc_spawn(TrProc *out, const char *cmd, int rows, int cols);
  * 0 on EOF, -1 on error. */
 int tr_proc_read(TrProc *proc, char *buf, int len);
 
+/* Write `len` bytes of input into the pty master. Returns bytes written or -1. */
+int tr_proc_write(TrProc *proc, const char *buf, int len);
+
 /* Wait for process exit, draining remaining output into `vt`.
  * Returns 0 on success, -1 on timeout. */
 int tr_proc_drain(TrProc *proc, void *vt_ctx, int timeout_ms,

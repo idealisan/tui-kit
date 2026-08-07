@@ -100,6 +100,15 @@ int tr_proc_read(TrProc *proc, char *buf, int len)
     return (int)n;
 }
 
+int tr_proc_write(TrProc *proc, const char *buf, int len)
+{
+    ssize_t n = write(proc->fd, buf, (size_t)len);
+    if (n < 0) {
+        return -1;
+    }
+    return (int)n;
+}
+
 int tr_proc_drain(TrProc *proc, void *vt_ctx, int timeout_ms,
                   void (*feed)(void *, const char *, int))
 {
