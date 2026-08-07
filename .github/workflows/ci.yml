@@ -114,7 +114,7 @@ jobs:
               return 0;
           }
           EOF
-          out=$(/tmp/pty_check)
+          out=$(/tmp/pty_check | tr -d '\r\n')
           test "$out" = "pty-ok" || { echo "platform test failed: '$out'"; exit 1; }
           echo "platform test OK"
 
