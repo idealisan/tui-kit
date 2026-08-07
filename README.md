@@ -101,8 +101,8 @@ src/
 
 ## Notes
 
-- Vendored components keep their own permissive
-  licenses (libvterm MIT, FreeType FTL, libpng/libpng-2.0, zlib).
+- Vendored components keep their own permissive licenses (libvterm MIT,
+  FreeType FTL, libpng/libpng-2.0, zlib).
 - `vterm_set_utf8(vt, 1)` must be called **before** `vterm_obtain_screen()`,
   and `vterm_screen_reset()` must run once after creation — otherwise the
   state layer's encoding table is left uninitialised and the first text byte
