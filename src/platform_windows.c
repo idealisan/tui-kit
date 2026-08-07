@@ -29,6 +29,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <libgen.h>
 
 #include "platform.h"
 
@@ -215,4 +216,17 @@ int tr_font_path(char *buf, size_t buflen)
         }
     }
     return -1;
+}
+
+int tr_exe_dir(char *buf, size_t buflen)
+{
+    char path[MAX_PATH];
+    DWORD n = GetModuleFileNameA(NULL, path, MAX_PATH);
+    if (n == 0 || n >= MAX_PATH)
+        return -1;
+    char *dir = dirname(path);
+    if (!dir)
+        return -1;
+    snprintf(buf, buflen, "%s", dir);
+    return 0;
 }
