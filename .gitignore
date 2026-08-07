@@ -1,0 +1,12 @@
+# build artifacts
+*.o
+termrenderer
+termrenderer.exe
+
+# output images
+out.png
+*.png
+
+# editor/OS
+.DS_Store
+*.swp
