@@ -4,12 +4,25 @@ set -e
 
 UNAME="$(uname -s 2>/dev/null || echo Windows)"
 
+STATIC_LIBS=0
+for a in "$@"; do
+  case "$a" in
+    --static-libs) STATIC_LIBS=1 ;;
+  esac
+done
+
 case "$UNAME" in
   Linux|Darwin)
-    # Statically link everything we can for a portable binary.
-    # If the static libs are missing (e.g. no .a for freetype/png), fall
-    # back to a dynamic build and print a note.
-    if pkg-config --static --libs freetype2 libpng >/dev/null 2>&1; then
+    # On macOS a *fully* static executable is impossible (no crt0.o), so
+    # `--static-libs` builds freetype/libpng/zlib from source as static .a
+    # archives and links them in, leaving only the system libc dynamic.
+    if [ "$STATIC_LIBS" -eq 1 ]; then
+      if [ "$UNAME" = "Darwin" ]; then
+        ./scripts/build-static-macos.sh
+      else
+        make STATIC=1
+      fi
+    elif pkg-config --static --libs freetype2 libpng >/dev/null 2>&1; then
       make STATIC=1
     else
       echo "note: static freetype/libpng not found; building dynamic" >&2

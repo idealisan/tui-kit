@@ -72,6 +72,32 @@ If you only have shared libraries, a dynamic build still works:
 make
 ```
 
+#### Static build from source (macOS)
+
+On macOS a *fully* static user-space executable is impossible — there is no
+`crt0.o`, so `ld -static` fails. `./build.sh --static-libs` therefore closes the
+gap the only way possible: it downloads **zlib**, **libpng** and **FreeType**,
+compiles each from source as a static archive (`.a`) into `extlibs/` (gitignored),
+and links those directly into the binary. Only the system libc
+(`libSystem` / `libutil`) remains dynamic, so the result carries **no Homebrew or
+other third-party dylib dependencies**.
+
+```
+./build.sh --static-libs      # or: make static
+```
+
+FreeType is built with PNG support **enabled** (`FT_CONFIG_OPTION_USE_PNG`):
+it decodes color-emoji (CBDT/CBLC) glyphs through libpng, so dropping PNG would
+silently break emoji rendering. Only brotli, bzip2 and harfbuzz are disabled
+(they are not needed). The build script is
+`scripts/build-static-macos.sh`; its vendored source and the built `extlibs/`
+directory are excluded via `.gitignore`. The output binary is `termrenderer` at
+the repository root (also matched by the `termrenderer-static` gitignore entry).
+
+> Note: the Linux path uses `pkg-config --static` (or `make STATIC=1`) and can be
+> fully static because glibc provides `crt0.o`. macOS cannot, hence the
+> from-source approach above.
+
 ### Windows
 
 `platform_windows.c` implements the same interface using the Windows Pseudo
