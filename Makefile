@@ -74,4 +74,9 @@ $(VTERM_DIR)/src/%.o: $(VTERM_DIR)/src/%.c $(VTERM_DIR)/src/utf8.h $(VTERM_DIR)/
 clean:
 	rm -f termrenderer termrenderer.exe $(OBJS) $(VTERM_OBJS) lib/libvterm.a
 
-.PHONY: all clean
+# Pixel-level regression tests (run with the bundled Noto font chain).
+# Requires $(EXE) to be built first.
+test: $(EXE)
+	python3 tests/run_tests.py --binary ./$(EXE)
+
+.PHONY: all clean test

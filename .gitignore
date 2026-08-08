@@ -11,3 +11,7 @@ out.png
 # editor/OS
 .DS_Store
 *.swp
+
+# python cache
+__pycache__/
+*.pyc

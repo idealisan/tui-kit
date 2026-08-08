@@ -113,6 +113,8 @@ src/
   and combining sequences are rendered by drawing the whole `cell.chars[]`
   run, sized to `cell.width` columns and centered per cell. This works only
   if the chosen font actually contains those glyphs — `font_width` is derived
-  from the face's `max_advance`, so a CJK-capable font yields ~1em cells where
+  from the advance of the representative `M` glyph (not `max_advance`, which a
+  proportional face can inflate with a single wide glyph), so a monospace
+  Noto face yields ~1em cells where
   two columns fit a wide glyph. Combining marks are placed via simple
   centering, not true advance-based kerning. Ligatures are not implemented.

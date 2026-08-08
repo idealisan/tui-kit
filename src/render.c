@@ -12,10 +12,12 @@
  * cell's foreground colour.
  *
  * Box-drawing characters (U+2500..U+257F) are rendered from the font like any
- * other glyph, but are fitted to the cell so borders connect: a horizontal
- * bar is stretched across the cell width, a vertical bar across its height,
- * and corners/crosses fill the cell. This is how a terminal aligns box art
- * regardless of the exact font metrics.
+ * other glyph, at the font's natural size and positioned with its own metrics
+ * (bitmap_left / bitmap_top). A box font (e.g. Noto Sans Mono) places every
+ * stroke on the cell grid, so adjacent cells connect automatically -- there is
+ * no stretching or re-centering to do. Keeping the glyph's real design also
+ * preserves intentionally dashed variants such as U+2506 (BOX DRAWINGS LIGHT
+ * TRIPLE DASH VERTICAL), which must render as a dashed line, not a solid one.
  */
 
 #include <stdio.h>
