@@ -46,6 +46,10 @@ jobs:
           test -s color.png
           echo "render test OK"
 
+      - name: Pixel-level regression tests (Noto)
+        run: |
+          python3 tests/run_tests.py --binary ./termrenderer
+
       - name: Verify PNG has rendered content
         run: |
           python3 - <<'EOF'

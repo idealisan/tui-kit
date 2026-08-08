@@ -109,5 +109,12 @@ src/
   and `vterm_screen_reset()` must run once after creation — otherwise the
   state layer's encoding table is left uninitialised and the first text byte
   segfaults. See `main.c` for the correct order.
-- Glyph coverage: full Unicode BMP via FreeType; wide/combining characters
-  are handled by libvterm's wcwidth logic. Ligatures are not implemented.
+- Glyph coverage: full Unicode BMP via FreeType. Wide characters (e.g. CJK)
+  and combining sequences are rendered by drawing the whole `cell.chars[]`
+  run, sized to `cell.width` columns and centered per cell. This works only
+  if the chosen font actually contains those glyphs — `font_width` is derived
+  from the advance of the representative `M` glyph (not `max_advance`, which a
+  proportional face can inflate with a single wide glyph), so a monospace
+  Noto face yields ~1em cells where
+  two columns fit a wide glyph. Combining marks are placed via simple
+  centering, not true advance-based kerning. Ligatures are not implemented.

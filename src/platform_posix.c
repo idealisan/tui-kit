@@ -7,6 +7,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <libgen.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,6 +18,12 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#endif
+
+#include "platform.h"
+
 #if defined(TR_PLATFORM_MACOS)
 #  include <util.h>
 #  include <sys/ioctl.h>
@@ -24,8 +31,6 @@
 #  include <pty.h>
 #  include <termios.h>
 #endif
-
-#include "platform.h"
 
 #define READ_CHUNK 4096
 
@@ -201,4 +206,31 @@ int tr_font_path(char *buf, size_t buflen)
         }
     }
     return -1;
+}
+
+int tr_exe_dir(char *buf, size_t buflen)
+{
+#if defined(__APPLE__)
+    char path[4096];
+    uint32_t sz = (uint32_t)sizeof(path);
+    if (_NSGetExecutablePath(path, &sz) != 0) {
+        return -1;
+    }
+    char *dir = dirname(path);
+    if (!dir) return -1;
+    snprintf(buf, buflen, "%s", dir);
+    return 0;
+#elif defined(__linux__)
+    char path[4096];
+    ssize_t n = readlink("/proc/self/exe", path, sizeof(path) - 1);
+    if (n < 0) return -1;
+    path[n] = '\0';
+    char *dir = dirname(path);
+    if (!dir) return -1;
+    snprintf(buf, buflen, "%s", dir);
+    return 0;
+#else
+    (void)buf; (void)buflen;
+    return -1;
+#endif
 }

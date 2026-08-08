@@ -25,8 +25,9 @@ typedef struct {
     int height;
 } PixelSize;
 
-/* render.c */
-void *render_screen(VTerm *vt, TermSize *size, PixelSize *out, const char *font_path, int font_px);
+/* render.c - font_paths is an ordered fallback list (first match wins) */
+void *render_screen(VTerm *vt, TermSize *size, PixelSize *out,
+                    const char **font_paths, int n_fonts, int font_px);
 
 /* png.c */
 int png_write(const char *path, void *rgba, int width, int height);

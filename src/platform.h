@@ -57,4 +57,8 @@ void tr_proc_close(TrProc *proc);
 /* Find a usable monospace font path. Returns 0 and fills buf, or -1. */
 int tr_font_path(char *buf, size_t buflen);
 
+/* Fill buf with the directory containing the running executable (no trailing
+ * slash). Returns 0 on success, -1 if it cannot be determined. */
+int tr_exe_dir(char *buf, size_t buflen);
+
 #endif /* TERMRENDERER_PLATFORM_H */
