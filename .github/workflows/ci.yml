@@ -239,8 +239,11 @@ jobs:
       - name: Smoke test
         shell: msys2 {0}
         run: |
-          ./termrenderer.exe -- echo "hello from windows"
-          test -f out.png
+          # The bare termrenderer.exe in the repo root has no runtime DLLs
+          # next to it; the bundled copy in winbin/ has every DLL it needs.
+          # Run from winbin/ so the loader finds them (exit 127 otherwise).
+          ./winbin/termrenderer.exe -- echo "hello from windows"
+          test -f winbin/out.png
 
       - name: Package and upload binary to release
         shell: msys2 {0}
