@@ -79,4 +79,9 @@ clean:
 test: $(EXE)
 	python3 tests/run_tests.py --binary ./$(EXE)
 
-.PHONY: all clean test
+# Self-contained static build for macOS: builds freetype/libpng/zlib from
+# source as static archives and links them in (system libc stays dynamic).
+static:
+	./scripts/build-static-macos.sh
+
+.PHONY: all clean test static

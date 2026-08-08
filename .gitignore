@@ -15,3 +15,11 @@ out.png
 # python cache
 __pycache__/
 *.pyc
+
+# vendored static libraries built from source (see scripts/build-static-macos.sh)
+extlibs/
+extlibs-build/
+termrenderer-static
+
+# uploadable static build artifact (produced by scripts/build-static-macos.sh)
+termrenderer-darwin-arm64.zip
