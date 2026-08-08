@@ -31,8 +31,9 @@ FIX = os.path.join(ROOT, "tests", "fixtures")
 
 # Render geometry. Generous rows/cols so fixtures sit at the top-left and
 # each cell is a comfortable size; thresholds in pnglib are independent of
-# the exact glyph metrics.
-COLS, ROWS = 12, 16
+# the exact glyph metrics. FONTSIZE is 2x the default (18) so box borders are
+# thick enough to render crisply rather than as ~1px anti-aliased lines.
+COLS, ROWS, FONTSIZE = 12, 16, 36
 
 CASES = [
     # name, fixture, assertion-description
@@ -49,6 +50,7 @@ CASES = [
 
 def render(binary, fixture, out_png):
     cmd = [binary, "--noto", "--cols", str(COLS), "--rows", str(ROWS),
+           "--fontsize", str(FONTSIZE),
            "--output", out_png, "--", "cat", fixture]
     r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
     if r.returncode != 0:
@@ -70,24 +72,42 @@ def check_box_borders(px, w, h, ch, bg):
 
 def check_dashed(px, w, h, ch, bg):
     vl = pnglib.vertical_lines(px, w, h, ch, bg, minpx=70)
-    solid = [v for v in vl if v[1] == 1]
-    dashed = [v for v in vl if v[1] > 1]
-    if len(solid) != 1:
-        return False, "expected exactly 1 solid (single-segment) line, found %d (%s)" % (len(solid), vl)
-    if len(dashed) != 1:
-        return False, "expected exactly 1 dashed (multi-segment) line, found %d (%s)" % (len(dashed), vl)
-    return True, "solid=%s segments, dashed=%s segments (faithful to U+2506)" % (solid[0][1], dashed[0][1])
+    if not vl:
+        return False, "no vertical lines found"
+    # Group adjacent columns into vertical stripes (a glyph wider than 1px
+    # spans several columns, each a tall line). The fixture is one solid `|`
+    # next to one dashed U+2506, so we expect exactly two stripes.
+    vl.sort()
+    stripes = []
+    cur = [vl[0]]
+    for item in vl[1:]:
+        if item[0] - cur[-1][0] <= 2:
+            cur.append(item)
+        else:
+            stripes.append(cur)
+            cur = [item]
+    stripes.append(cur)
+    solid = [s for s in stripes if all(c[1] == 1 for c in s)]
+    dashed = [s for s in stripes if any(c[1] > 1 for c in s)]
+    if len(solid) != 1 or len(dashed) != 1:
+        return False, "expected 1 solid + 1 dashed stripe, got solid=%d dashed=%d (%s)" % (
+            len(solid), len(dashed), stripes)
+    return True, "solid stripe %d cols, dashed stripe %d cols (faithful to U+2506)" % (
+        len(solid[0]), len(dashed[0]))
 
 
 def check_cjk(px, w, h, ch, bg):
     total = pnglib.fg_count(px, w, h, ch, bg)
     if total < 250:
         return False, "too little ink (%d px); CJK likely not rendered" % total
-    # CJK cells of "AB中文CD" sit around x in [18, 42]; ink there proves the
-    # wide CJK glyphs were drawn (not just the ASCII).
-    region = pnglib.fg_in_rect(px, w, h, ch, bg, x0=18, x1=42)
+    # "AB中文CD": A,B are 1 col each, 中/文 are wide (2 cols each), so the CJK
+    # glyphs occupy columns 2..5. Locate them from the measured cell width
+    # (image width / COLS) so the check is robust to font-size changes.
+    fw = w // COLS
+    x0, x1 = 2 * fw - 2, 6 * fw + 2
+    region = pnglib.fg_in_rect(px, w, h, ch, bg, x0=x0, x1=x1)
     if region < 20:
-        return False, "no CJK-region ink (%d px in x[18,42])" % region
+        return False, "no CJK-region ink (%d px in x[%d,%d])" % (region, x0, x1)
     return True, "fg=%d px, CJK-region ink=%d px" % (total, region)
 
 
