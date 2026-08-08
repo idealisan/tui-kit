@@ -4,6 +4,10 @@ on:
   release:
     types: [published]
 
+# Needed so `gh release upload` can attach assets to the release.
+permissions:
+  contents: write
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -19,7 +23,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            build-essential pkg-config \
+            build-essential pkg-config zip \
             libfreetype6-dev libpng-dev \
             zlib1g-dev libbz2-dev libbrotli-dev
 
@@ -122,7 +126,7 @@ jobs:
           test "$out" = "pty-ok" || { echo "platform test failed: '$out'"; exit 1; }
           echo "platform test OK"
 
-      - name: Upload render artifact
+      - name: Upload render artifact (debug)
         uses: actions/upload-artifact@v4
         with:
           name: renders
@@ -130,19 +134,89 @@ jobs:
             color.png
             out.png
 
-  windows-build:
-    name: Build (Windows cross-compile)
-    runs-on: ubuntu-latest
+      - name: Package and upload binary to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          zip termrenderer-linux-x86_64.zip termrenderer
+          gh release upload "${{ github.event.release.tag_name }}" \
+            termrenderer-linux-x86_64.zip --clobber
+
+  macos-build:
+    name: Build (macOS)
+    runs-on: macos-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install MinGW
-        run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-x86-64
+      - name: Build static binary (freetype/libpng/zlib from source)
+        # Fully static user-space isn't possible on macOS (no crt0.o); this
+        # builds the three libs as static .a and links them, leaving only the
+        # system libc dynamic. Result: no Homebrew/third-party dylib deps.
+        run: make static
 
-      - name: Syntax-check Windows platform layer
+      - name: Verify static binary
         run: |
-          # Only compile-check platform_windows.c (needs Windows headers/libs to
-          # link fully). We verify it at least parses for the cross compiler.
-          x86_64-w64-mingw32-gcc -Wall -Wextra -Iinclude -Isrc -fsyntax-only \
-            src/platform_windows.c && echo "Windows platform layer syntax OK"
+          file termrenderer
+          otool -L termrenderer
+
+      - name: Smoke test
+        run: |
+          ./termrenderer -- echo "hello from mac"
+          test -f out.png
+          echo "smoke test OK"
+
+      - name: Pixel-level regression tests (Noto)
+        run: |
+          python3 tests/run_tests.py --binary ./termrenderer
+
+      - name: Package and upload binary to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          zip termrenderer-darwin-arm64.zip termrenderer
+          gh release upload "${{ github.event.release.tag_name }}" \
+            termrenderer-darwin-arm64.zip --clobber
+
+  windows-build:
+    name: Build (Windows)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up MSYS2 (MinGW64)
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            base-devel
+            zip
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-pkgconf
+            mingw-w64-x86_64-freetype
+            mingw-w64-x86_64-libpng
+            mingw-w64-x86_64-zlib
+
+      - name: Build Windows binary
+        shell: msys2 {0}
+        run: |
+          make OS=windows CC=x86_64-w64-mingw32-gcc EXE=termrenderer.exe \
+               CFLAGS="-O2 -Wall -Wextra -Iinclude -Isrc"
+          file termrenderer.exe || true
+
+      - name: Smoke test
+        shell: msys2 {0}
+        run: |
+          ./termrenderer.exe -- echo "hello from windows"
+          test -f out.png
+
+      - name: Package and upload binary to release
+        shell: msys2 {0}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          zip termrenderer-windows-x86_64.zip termrenderer.exe
+          gh release upload "${{ github.event.release.tag_name }}" \
+            termrenderer-windows-x86_64.zip --clobber
