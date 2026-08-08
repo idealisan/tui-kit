@@ -168,18 +168,37 @@ int tr_proc_drain(TrProc *proc, void *vt_ctx, int timeout_ms,
     char buf[4096];
 
     for (;;) {
-        DWORD waited = WaitForSingleObject(st->pi.hProcess, 50);
-        int n = tr_proc_read(proc, buf, sizeof(buf));
-        if (n > 0) {
-            feed(vt_ctx, buf, n);
-            continue;
+        /* Non-blocking read: PeekNamedPipe reports how many bytes are
+         * buffered, and ReadFile on a pipe returns as soon as any data is
+         * present, so only read when avail > 0. This matters because a
+         * blocking ReadFile can wait forever here -- after the child exits,
+         * the ConPTY host keeps the output pipe open (no EOF), so ReadFile
+         * would never return and the timeout below would never be reached. */
+        DWORD avail = 0;
+        if (PeekNamedPipe(st->stdout_read, NULL, 0, NULL, &avail, NULL) && avail > 0) {
+            int n = tr_proc_read(proc, buf, sizeof(buf));
+            if (n > 0) { feed(vt_ctx, buf, n); continue; }
         }
-        if (waited == WAIT_OBJECT_0)
+
+        if (WaitForSingleObject(st->pi.hProcess, 0) == WAIT_OBJECT_0) {
+            /* Child exited. Drain anything written just before exit, then
+             * stop -- again without a blocking read. */
+            for (;;) {
+                DWORD rem = 0;
+                if (!PeekNamedPipe(st->stdout_read, NULL, 0, NULL, &rem, NULL) || rem == 0)
+                    break;
+                int n = tr_proc_read(proc, buf, sizeof(buf));
+                if (n <= 0) break;
+                feed(vt_ctx, buf, n);
+            }
             break;
-        if (GetTickCount() > deadline) {
+        }
+
+        if ((long)(GetTickCount() - deadline) >= 0) {
             fprintf(stderr, "timeout waiting for command output\n");
             return -1;
         }
+        Sleep(10);
     }
     return 0;
 }
