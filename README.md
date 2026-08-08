@@ -105,9 +105,14 @@ Console (ConPTY, Win10 1809+). To cross-compile you need MinGW-w64 plus
 Windows builds of FreeType, libpng and zlib available in the cross toolchain:
 
 ```
-make OS=windows CC=x86_64-w64-mingw32-gcc EXE=termrenderer.exe \
-     CFLAGS="-O2 -Wall -Wextra -Iinclude -Isrc"
+make OS=windows CC=x86_64-w64-mingw32-gcc EXE=termrenderer.exe
 ```
+
+> Do **not** pass `CFLAGS=` on the command line: a command-line variable
+> overrides every `CFLAGS +=` in the Makefile, including the one that appends
+> `pkg-config --cflags freetype2 libpng`. Without those include dirs the build
+> fails at `ft2build.h`. Just select the target/compiler and let `make` compute
+> the flags.
 
 To build *on* Windows with MSYS2, install `mingw-w64-x86_64-{gcc,freetype,libpng,zlib}`
 then run `./build.sh`.
