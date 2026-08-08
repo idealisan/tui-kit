@@ -18,6 +18,7 @@ Usage:
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -109,12 +110,17 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--binary", default=os.environ.get("TERMRENDERER",
                                                         os.path.join(ROOT, "termrenderer")))
+    ap.add_argument("--keep", metavar="DIR", default=None,
+                    help="copy each rendered PNG into DIR for inspection")
     args = ap.parse_args()
 
     if not os.path.exists(args.binary):
         print("error: termrenderer binary not found: %s" % args.binary)
         print("build it first with `make`, or pass --binary PATH")
         return 2
+
+    if args.keep:
+        os.makedirs(args.keep, exist_ok=True)
 
     tmp = tempfile.mkdtemp(prefix="termrenderer-tests-")
     passed = 0
@@ -124,6 +130,8 @@ def main():
         fixture_path = os.path.join(FIX, fixture)
         try:
             render(args.binary, fixture_path, png)
+            if args.keep:
+                shutil.copy(png, os.path.join(args.keep, name + ".png"))
             w, h, ch, px = pnglib.load_png(png)
             bg = pnglib.background(px, w, ch)
             ok, detail = CHECKS[name](px, w, h, ch, bg)
