@@ -10,6 +10,12 @@
  * Color bitmap glyphs (e.g. Noto Color Emoji, FreeType FT_PIXEL_MODE_BGRA)
  * are blended in their own colours; every other glyph is tinted with the
  * cell's foreground colour.
+ *
+ * Box-drawing characters (U+2500..U+257F) are rendered from the font like any
+ * other glyph, but are fitted to the cell so borders connect: a horizontal
+ * bar is stretched across the cell width, a vertical bar across its height,
+ * and corners/crosses fill the cell. This is how a terminal aligns box art
+ * regardless of the exact font metrics.
  */
 
 #include <stdio.h>
@@ -75,17 +81,26 @@ static uint32_t blend(uint32_t src, uint32_t dst)
     return (0xFFu << 24) | ((uint32_t)r << 16) | ((uint32_t)g << 8) | b;
 }
 
+/* Box-drawing range (light, heavy, and arcs). */
+static int is_box_drawing(uint32_t ch)
+{
+    return (ch >= 0x2500 && ch <= 0x257F);
+}
+
 /*
  * Draw a FreeType glyph bitmap into the cell at (cell_x, cell_y).
  *
- * The glyph is scaled down (nearest-neighbour) if it does not fit inside the
- * available box (avail_w x avail_h); otherwise it is drawn at native size and
- * aligned to the cell baseline. Tinted with `fg` for non-colour glyphs; colour
- * (BGRA) glyphs use their own pixels.
+ * `box` selects box-drawing fitting: the glyph is stretched to fill the cell
+ * along the axis of its stroke (horizontal bar -> full width, vertical bar ->
+ * full height, corners/crosses -> full cell) so adjacent cells connect. Normal
+ * glyphs are only scaled down to fit and baseline-aligned.
+ *
+ * Tinted with `fg` for non-colour glyphs; colour (BGRA) glyphs use their own
+ * pixels.
  */
 static void draw_glyph(Canvas *c, FT_Bitmap *bmp, int cell_x, int cell_y,
                        int avail_w, int avail_h, int baseline, int bitmap_top,
-                       uint32_t fg, int bold)
+                       int bitmap_left, uint32_t fg, int bold, int box)
 {
     int w = (int)bmp->width;
     int h = (int)bmp->rows;
@@ -93,33 +108,49 @@ static void draw_glyph(Canvas *c, FT_Bitmap *bmp, int cell_x, int cell_y,
         return;
     }
 
-    double s = 1.0;
-    if (w > avail_w) s = (double)avail_w / (double)w;
-    if (h > avail_h) s = (double)avail_h / (double)h;
-    if (s > 1.0) s = 1.0;
+    int dw, dh, pen_x, pen_y;
+    double sxf, syf;
 
-    int dw = (int)(w * s + 0.5);
-    int dh = (int)(h * s + 0.5);
-    if (dw < 1) dw = 1;
-    if (dh < 1) dh = 1;
-
-    int pen_x = cell_x + (avail_w - dw) / 2;
-    int pen_y;
-    if (s >= 1.0) {
+    if (box) {
+        /* Render the real box-drawing glyph at its natural size, positioned
+         * with the font's own metrics (bitmap_left / bitmap_top). A proper
+         * box font places every stroke on the cell grid, so adjacent cells
+         * connect automatically -- there is no stretching or re-centering to
+         * do. Stretching would move the junction arms off the bar positions
+         * and break the borders. */
+        dw = w; dh = h;
+        pen_x = cell_x + bitmap_left;
         pen_y = cell_y + baseline - bitmap_top;
+        sxf = syf = 1.0;
     } else {
-        pen_y = cell_y + (avail_h - dh) / 2;
+        double s = 1.0;
+        if (w > avail_w) s = (double)avail_w / (double)w;
+        if (h > avail_h) s = (double)avail_h / (double)h;
+        if (s > 1.0) s = 1.0;
+
+        dw = (int)(w * s + 0.5);
+        dh = (int)(h * s + 0.5);
+        if (dw < 1) dw = 1;
+        if (dh < 1) dh = 1;
+
+        pen_x = cell_x + (avail_w - dw) / 2;
+        if (s >= 1.0) {
+            pen_y = cell_y + baseline - bitmap_top;
+        } else {
+            pen_y = cell_y + (avail_h - dh) / 2;
+        }
+        sxf = syf = 1.0 / s;
     }
 
     int is_color = (bmp->pixel_mode == FT_PIXEL_MODE_BGRA);
     int pitch = bmp->pitch;
 
     for (int dy = 0; dy < dh; dy++) {
-        int sy = (int)(dy / s);
+        int sy = (int)(dy * syf);
         if (sy >= h) sy = h - 1;
         unsigned char *row = bmp->buffer + (size_t)sy * pitch;
         for (int dx = 0; dx < dw; dx++) {
-            int sx = (int)(dx / s);
+            int sx = (int)(dx * sxf);
             if (sx >= w) sx = w - 1;
 
             uint32_t px;
@@ -156,13 +187,13 @@ static void draw_glyph(Canvas *c, FT_Bitmap *bmp, int cell_x, int cell_y,
     }
 
     /* crude bold: redraw one pixel to the right for non-colour glyphs */
-    if (bold && !is_color) {
+    if (bold && !is_color && !box) {
         for (int dy = 0; dy < dh; dy++) {
-            int sy = (int)(dy / s);
+            int sy = (int)(dy * syf);
             if (sy >= h) sy = h - 1;
             unsigned char *row = bmp->buffer + (size_t)sy * pitch;
             for (int dx = 0; dx < dw; dx++) {
-                int sx = (int)(dx / s);
+                int sx = (int)(dx * sxf);
                 if (sx >= w) sx = w - 1;
                 uint8_t cov;
                 if (bmp->pixel_mode == FT_PIXEL_MODE_MONO) {
@@ -248,7 +279,17 @@ void *render_screen(VTerm *vt, TermSize *size, PixelSize *out,
     FT_Face primary = c.faces[0];
 
     c.font_height = ((font_px > 0 ? font_px : 18)) + CELL_PADDING;
-    c.font_width = (int)((float)primary->size->metrics.max_advance / 64.0f);
+    /* Cell width is the advance of a representative monospace glyph (M),
+     * NOT max_advance: a proportional font's max_advance can be inflated by a
+     * single wide/fullwidth glyph (e.g. 51px for an 18px Latin face), which
+     * would make every cell absurdly wide and stop box glyphs from filling
+     * it. */
+    FT_Load_Char(primary, 'M', FT_LOAD_NO_HINTING);
+    int cell_adv = (int)(primary->glyph->advance.x / 64);
+    if (cell_adv < 1) {
+        cell_adv = (int)((float)primary->size->metrics.max_advance / 64.0f);
+    }
+    c.font_width = cell_adv;
     c.ascender = (int)((float)primary->size->metrics.ascender / 64.0f);
     c.baseline = c.font_height - CELL_PADDING / 2 - 1;
 
@@ -340,7 +381,8 @@ void *render_screen(VTerm *vt, TermSize *size, PixelSize *out,
                 FT_GlyphSlot slot = pick->glyph;
                 draw_glyph(&c, &slot->bitmap, cell_x, cell_y,
                            cell_px_w, c.font_height, c.baseline,
-                           slot->bitmap_top, fg, cell.attrs.bold);
+                           slot->bitmap_top, slot->bitmap_left, fg,
+                           cell.attrs.bold, is_box_drawing(ch));
             }
 
             /* underline / strike */

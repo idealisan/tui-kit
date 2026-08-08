@@ -27,6 +27,7 @@
 static const char *kNotoFonts[] = {
     "NotoSans-Regular.ttf",
     "NotoColorEmoji-Regular.ttf",
+    "NotoSansMono-Regular.ttf",
     "NotoSansSC-Regular.otf",
     "NotoSansJP-Regular.otf",
     "NotoSansKR-Regular.otf",
@@ -50,7 +51,8 @@ static void usage(const char *prog)
         "  --font PATH     truetype font (auto-detect if omitted)\n"
         "  --timeout MS    wait for output, ms (default 5000)\n"
         "  --output PATH   output png (default out.png)\n"
-        "  --fontsize N    glyph pixel size (default 18)\n",
+        "  --fontsize N    glyph pixel size (default 18)\n"
+        "  --noto          use the bundled Noto Sans as the primary font\n",
         prog, DEFAULT_COLS, DEFAULT_ROWS);
 }
 
@@ -67,6 +69,7 @@ int main(int argc, char *argv[])
     const char *output = "out.png";
     int timeout_ms = 5000;
     int font_px = 18;
+    int force_noto = 0;
 
     int i = 1;
     const char *cmd = NULL;
@@ -85,8 +88,10 @@ int main(int argc, char *argv[])
             timeout_ms = atoi(argv[++i]);
         } else if (strcmp(argv[i], "--output") == 0 && i + 1 < argc) {
             output = argv[++i];
-        } else if (strcmp(argv[i], "--fontsize") == 0 && i + 1 < argc) {
+        } else         if (strcmp(argv[i], "--fontsize") == 0 && i + 1 < argc) {
             font_px = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "--noto") == 0) {
+            force_noto = 1;
         } else {
             fprintf(stderr, "unknown option: %s\n", argv[i]);
             usage(argv[0]);
@@ -116,7 +121,22 @@ int main(int argc, char *argv[])
     }
 
     if (!font_path) {
-        if (tr_font_path(font_buf, sizeof(font_buf)) < 0) {
+        if (force_noto) {
+            /* Unified Noto primary. Use the monospace Noto Sans Mono: it is a
+             * real monospace face whose box-drawing glyphs are designed for
+             * its own cell size, so borders align. Other Noto fonts (and the
+             * system default) remain in the chain as fallbacks for codepoints
+             * Noto Sans Mono lacks. */
+            char exedir[1024];
+            if (tr_exe_dir(exedir, sizeof(exedir)) == 0) {
+                snprintf(font_buf, sizeof(font_buf), "%s/fonts/%s",
+                         exedir, "NotoSansMono-Regular.ttf");
+                if (access(font_buf, R_OK) == 0) {
+                    font_path = font_buf;
+                }
+            }
+        }
+        if (!font_path && tr_font_path(font_buf, sizeof(font_buf)) < 0) {
             /* No system monospace font: fall back to bundled Noto Sans. */
             char exedir[1024];
             if (tr_exe_dir(exedir, sizeof(exedir)) == 0) {
