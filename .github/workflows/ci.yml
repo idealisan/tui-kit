@@ -199,12 +199,39 @@ jobs:
             mingw-w64-x86_64-libpng
             mingw-w64-x86_64-zlib
 
-      - name: Build Windows binary
+      - name: Build Windows binary and bundle runtime DLLs
         shell: msys2 {0}
         run: |
-          make OS=windows CC=x86_64-w64-mingw32-gcc EXE=termrenderer.exe \
-               CFLAGS="-O2 -Wall -Wextra -Iinclude -Isrc"
+          # NOTE: do NOT pass CFLAGS on the command line -- a command-line
+          # variable overrides every `CFLAGS +=` in the Makefile, including the
+          # one that appends `pkg-config --cflags freetype2 libpng`. Without
+          # those the freetype2/libpng16 include dirs are missing and the build
+          # dies at `ft2build.h`. Just select target+compiler and let make
+          # compute the flags.
+          make OS=windows CC=x86_64-w64-mingw32-gcc EXE=termrenderer.exe
           file termrenderer.exe || true
+          # The MinGW exe is dynamically linked to freetype/libpng/zlib, so copy
+          # every runtime DLL it (transitively) needs into winbin/ -- otherwise
+          # the artifact won't run on a machine without MSYS2. We walk the PE
+          # import table recursively with objdump and copy from /mingw64/bin,
+          # skipping DLLs that ship with Windows itself.
+          dest=winbin; mkdir -p "$dest"; cp termrenderer.exe "$dest/"
+          imports() { objdump -p "$1" 2>/dev/null | awk '/DLL Name/{print $3}'; }
+          changed=1
+          while [ "$changed" -eq 1 ]; do
+            changed=0
+            for f in "$dest"/*; do
+              for d in $(imports "$f"); do
+                case "$d" in
+                  [Kk][Ee][Rr][Nn][Ee][Ll]32.dll|ntdll.dll|msvcrt.dll|ucrtbase.dll|user32.dll|gdi32.dll|advapi32.dll|shell32.dll|ole32.dll|ws2_32.dll|bcrypt.dll|api-ms-*.dll) continue ;;
+                esac
+                if [ -f "/mingw64/bin/$d" ] && [ ! -f "$dest/$d" ]; then
+                  cp "/mingw64/bin/$d" "$dest/" && changed=1
+                fi
+              done
+            done
+          done
+          ls -la "$dest"
 
       - name: Smoke test
         shell: msys2 {0}
@@ -217,6 +244,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          zip termrenderer-windows-x86_64.zip termrenderer.exe
+          (cd winbin && zip -r ../termrenderer-windows-x86_64.zip .)
           gh release upload "${{ github.event.release.tag_name }}" \
             termrenderer-windows-x86_64.zip --clobber
